@@ -1,139 +1,444 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- 🎮 TODO: เปลี่ยนชื่อเกมของทีมตรงนี้ -->
-  <title>berrybaitoei</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: #0b1d3a;
-      color: #fff;
-      font-family: "Sarabun", "Noto Sans Thai", system-ui, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      min-height: 100vh;
-      padding: 12px;
-      touch-action: none; /* กันหน้าจอเลื่อนตอนลากนิ้วบนมือถือ */
+"""
+นักวิ่งเก็บขยะ (Trash Runner) - เวอร์ชัน Python + pygame
+
+ติดตั้ง:  pip install pygame
+รัน:      python trash_runner.py
+
+ควบคุม:
+  ↑ / W / Space  = กระโดด
+  ↓ / S          = ก้ม
+  Enter หรือคลิกปุ่ม = เริ่ม / เริ่มใหม่
+"""
+import math
+import random
+from array import array
+
+import pygame
+
+# ---------------- ค่าตั้งต้นของเกม ----------------
+W, H = 960, 420          # ขนาดหน้าจอ
+GY = 350                 # ระดับพื้น
+DUR = 30                 # เวลาเล่น (วินาที)
+GAP = 180                # ระยะห่างขั้นต่ำระหว่างถุงขยะกับสิ่งกีดขวาง
+JUMP_V = -640            # ความแรงกระโดด (ยิ่งติดลบมาก ยิ่งกระโดดสูง)
+GRAVITY = 2100
+PLAYER_X = 200
+SR = 22050               # sample rate ของเสียง
+
+pygame.mixer.pre_init(SR, -16, 1, 512)
+pygame.init()
+screen = pygame.display.set_mode((W, H))
+pygame.display.set_caption("นักวิ่งเก็บขยะ")
+clock = pygame.time.Clock()
+
+
+def thai_font(size, bold=False):
+    """หาฟอนต์ที่รองรับภาษาไทยในเครื่อง"""
+    for name in ["tahoma", "leelawadeeui", "leelawadee", "thonburi", "sukhumvitset",
+                 "notosansthai", "loma", "garuda", "kinnari", "browalliaupc"]:
+        path = pygame.font.match_font(name, bold=bold)
+        if path:
+            f = pygame.font.Font(path, size)
+            # เช็กว่าฟอนต์มีตัวอักษรไทยจริง (ถ้าไม่มี จะได้กล่องเหมือนตัวอักษรที่ไม่มีอยู่จริง)
+            thai = pygame.image.tobytes(f.render("ก", True, (255, 255, 255)), "RGBA")
+            missing = pygame.image.tobytes(f.render("", True, (255, 255, 255)), "RGBA")
+            if thai != missing:
+                return f
+    return pygame.font.SysFont(None, size, bold=bold)
+
+
+F_BIG = thai_font(56, True)
+F_MID = thai_font(24, True)
+F_SM = thai_font(20)
+
+
+# ---------------- เสียงเอฟเฟกต์ (สร้างจากคลื่นเสียง ไม่ใช้ไฟล์) ----------------
+def make_sound(parts):
+    """parts = [(ความถี่เริ่ม, ความถี่จบ, วินาที, ชนิดคลื่น, ความดัง), ...] เล่นต่อกัน"""
+    buf = array("h")
+    for f1, f2, dur, kind, vol in parts:
+        n = int(SR * dur)
+        phase = 0.0
+        for i in range(n):
+            t = i / n
+            f = f1 * (f2 / f1) ** t
+            phase += f / SR
+            p = phase % 1.0
+            if kind == "square":
+                v = 1.0 if p < 0.5 else -1.0
+            elif kind == "saw":
+                v = 2 * p - 1
+            elif kind == "tri":
+                v = 4 * abs(p - 0.5) - 1
+            else:  # noise
+                v = random.uniform(-1, 1)
+            buf.append(int(v * vol * (1 - t) * 32767))
+    return pygame.mixer.Sound(buffer=buf.tobytes())
+
+
+try:
+    SFX = {
+        "bag": make_sound([(660, 990, 0.08, "square", 0.25), (990, 1480, 0.12, "square", 0.22)]),
+        "hit": make_sound([(300, 60, 0.12, "noise", 0.6), (220, 70, 0.3, "saw", 0.35)]),
+        "fast": make_sound([(880, 880, 0.08, "square", 0.2), (1, 1, 0.06, "tri", 0.0),
+                            (880, 880, 0.08, "square", 0.2)]),
+        "win": make_sound([(f, f, 0.14, "tri", 0.4) for f in (523, 659, 784, 1046)]),
+        "lose": make_sound([(f, f * 0.97, 0.2, "tri", 0.4) for f in (392, 330, 262, 196)]),
     }
-    h1 { font-size: 1.6rem; margin: 8px 0; color: #ffb020; }
-    #hud { display: flex; gap: 24px; font-size: 1.2rem; margin-bottom: 8px; }
-    canvas {
-      background: linear-gradient(#1e5fa8, #0e3a6e);
-      border: 3px solid #ffb020;
-      border-radius: 12px;
-      width: 100%;
-      max-width: 480px;
-      aspect-ratio: 3 / 4;
-    }
-    #help { margin-top: 8px; opacity: 0.8; font-size: 0.95rem; text-align: center; }
-  </style>
-</head>
-<body>
-  <!-- 🎮 TODO: เปลี่ยนชื่อเกมของทีมตรงนี้ด้วย -->
-  <h1>berrybaitoei</h1>
-  <div id="hud">
-    <span>⭐ คะแนน: <b id="score">0</b></span>
-  </div>
-  <canvas id="game" width="480" height="640"></canvas>
-  <p id="help">ใช้ปุ่มลูกศร ← ↑ → ↓ หรือ ลากนิ้วบนจอ เพื่อเก็บดาว</p>
+except pygame.error:
+    SFX = {}
 
-  <script>
-    // =========================================================
-    // 1) ตั้งค่าเกม  (ลองแก้ตัวเลขตรงนี้ด้วยมือดูได้เลย!)
-    // =========================================================
-    const PLAYER_SPEED = 5;     // ความเร็วผู้เล่น
-    const STAR_COUNT   = 3;     // จำนวนดาวบนจอพร้อมกัน
-    const PLAYER_EMOJI = "🦀";  // ตัวละครผู้เล่น
-    const STAR_EMOJI   = "⭐";  // ของที่ต้องเก็บ
 
-    const canvas = document.getElementById("game");
-    const ctx = canvas.getContext("2d");
-    const scoreEl = document.getElementById("score");
+def play(name):
+    if name in SFX:
+        SFX[name].play()
 
-    // =========================================================
-    // 2) ข้อมูลในเกม (state)
-    // =========================================================
-    let score = 0;
-    const player = { x: 240, y: 560, size: 48 };
-    let stars = [];
-    const keys = {};
 
-    function randomStar() {
-      return {
-        x: 30 + Math.random() * (canvas.width - 60),
-        y: 30 + Math.random() * (canvas.height - 160),
-        size: 36,
-      };
-    }
-    for (let i = 0; i < STAR_COUNT; i++) stars.push(randomStar());
+# ---------------- สถานะเกม ----------------
+class Game:
+    def __init__(self):
+        self.reset()
+        self.mode = "start"   # start / play / win / lose
 
-    // =========================================================
-    // 3) การควบคุม: คีย์บอร์ด + นิ้ว/เมาส์
-    // =========================================================
-    window.addEventListener("keydown", (e) => { keys[e.key] = true; });
-    window.addEventListener("keyup",   (e) => { keys[e.key] = false; });
+    def reset(self):
+        self.t = DUR
+        self.lives = 3
+        self.bags = 0
+        self.speed = 280
+        self.py = GY
+        self.vy = 0
+        self.duck = False
+        self.inv = 0          # เวลาอมตะหลังโดนชน
+        self.obs = []         # สิ่งกีดขวาง
+        self.items = []       # ถุงขยะ
+        self.next_obs = 1.4
+        self.next_bag = 0.5
+        self.run = 0
+        self.scroll = 0
+        self.fx = []          # ตัวเลข +1 / -1 ลอยขึ้น
+        self.shake = 0
+        self.hard = False
+        self.alert = 0
 
-    function moveToPointer(e) {
-      const rect = canvas.getBoundingClientRect();
-      player.x = ((e.clientX - rect.left) / rect.width) * canvas.width;
-      player.y = ((e.clientY - rect.top) / rect.height) * canvas.height;
-    }
-    canvas.addEventListener("pointerdown", moveToPointer);
-    canvas.addEventListener("pointermove", (e) => { if (e.buttons) moveToPointer(e); });
+    def start(self):
+        self.reset()
+        self.mode = "play"
 
-    // =========================================================
-    // 4) อัปเดตเกมทุกเฟรม
-    // =========================================================
-    function update() {
-      if (keys["ArrowLeft"])  player.x -= PLAYER_SPEED;
-      if (keys["ArrowRight"]) player.x += PLAYER_SPEED;
-      if (keys["ArrowUp"])    player.y -= PLAYER_SPEED;
-      if (keys["ArrowDown"])  player.y += PLAYER_SPEED;
+    def end(self, win):
+        self.mode = "win" if win else "lose"
+        play("win" if win else "lose")
 
-      // ไม่ให้ผู้เล่นหลุดขอบจอ
-      player.x = Math.max(24, Math.min(canvas.width - 24, player.x));
-      player.y = Math.max(24, Math.min(canvas.height - 24, player.y));
+    # ---------- สร้างสิ่งกีดขวาง ----------
+    def spawn_obs(self):
+        r = random.random()
+        if self.t < DUR - 2.5 and r < 0.38:
+            o = {"type": "drone", "w": 62, "h": 30, "y": GY - 66}   # ต้องก้มหลบ
+        elif r < 0.7:
+            o = {"type": "cone", "w": 34, "h": 46, "y": GY - 46}    # ต้องกระโดด
+        else:
+            o = {"type": "crate", "w": 50, "h": 42, "y": GY - 42}   # ต้องกระโดด
+        o["x"] = W + 40
+        o["hit"] = False
+        for b in self.items:
+            if b["x"] + 15 + GAP > o["x"]:
+                o["x"] = b["x"] + 15 + GAP
+        self.obs.append(o)
+        self.next_obs = random.uniform(0.75, 1.15) if self.hard else random.uniform(1.25, 1.9)
 
-      // ชนดาว = ได้คะแนน แล้วสุ่มดาวใหม่
-      stars.forEach((s, i) => {
-        const dist = Math.hypot(player.x - s.x, player.y - s.y);
-        if (dist < (player.size + s.size) / 2) {
-          score += 1;
-          scoreEl.textContent = score;
-          stars[i] = randomStar();
-        }
-      });
-    }
+    # ---------- สร้างถุงขยะ ----------
+    def spawn_bag(self):
+        high = random.random() < 0.4
+        x = W + 40 + random.uniform(0, 120)
+        for o in self.obs:
+            if o["x"] - GAP < x < o["x"] + o["w"] + GAP:
+                x = o["x"] + o["w"] + GAP
+        self.items.append({"x": x, "y": GY - 80 if high else GY, "got": False})
+        self.next_bag = random.uniform(0.6, 1.2)
 
-    // =========================================================
-    // 5) วาดทุกอย่างลงจอ
-    // =========================================================
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
+    def update(self, dt, keys):
+        self.t -= dt
+        if self.t <= 0:
+            self.t = 0
+            self.end(True)
+            return
 
-      stars.forEach((s) => {
-        ctx.font = s.size + "px serif";
-        ctx.fillText(STAR_EMOJI, s.x, s.y);
-      });
+        # ครบ 15 วินาที -> ยากขึ้น
+        if not self.hard and self.t <= DUR / 2:
+            self.hard = True
+            self.next_obs = min(self.next_obs, 0.5)
+            self.alert = 1.6
+            play("fast")
+        self.speed = (340 if self.hard else 280) + (DUR - self.t) * 5
 
-      ctx.font = player.size + "px serif";
-      ctx.fillText(PLAYER_EMOJI, player.x, player.y);
-    }
+        jump = keys[pygame.K_UP] or keys[pygame.K_w] or keys[pygame.K_SPACE]
+        down = keys[pygame.K_DOWN] or keys[pygame.K_s]
+        on_ground = self.py >= GY
+        self.duck = down and on_ground
+        if jump and on_ground and not self.duck:
+            self.vy = JUMP_V
+        self.vy += (4200 if down and not on_ground else GRAVITY) * dt
+        self.py += self.vy * dt
+        if self.py >= GY:
+            self.py, self.vy = GY, 0
 
-    // =========================================================
-    // 6) Game loop: update → draw → วนซ้ำ ~60 ครั้ง/วินาที
-    // =========================================================
-    function loop() {
-      update();
-      draw();
-      requestAnimationFrame(loop);
-    }
-    loop();
-  </script>
-</body>
-</html>
+        self.run += dt * self.speed / 28
+        self.scroll += self.speed * dt
+        self.inv = max(0, self.inv - dt)
+        self.shake = max(0, self.shake - dt)
+        self.alert = max(0, self.alert - dt)
+
+        self.next_obs -= dt
+        if self.next_obs <= 0:
+            self.spawn_obs()
+        self.next_bag -= dt
+        if self.next_bag <= 0:
+            self.spawn_bag()
+
+        ph = 32 if self.duck else 60
+        me = pygame.Rect(PLAYER_X - 14, self.py - ph + 4, 28, ph - 4)
+
+        for o in self.obs:
+            o["x"] -= self.speed * dt
+            box = pygame.Rect(o["x"] + 4, o["y"] + 4, o["w"] - 8, o["h"] - 6)
+            if not o["hit"] and self.inv <= 0 and me.colliderect(box):
+                o["hit"] = True
+                self.lives -= 1
+                self.inv = 1.3
+                self.shake = 0.3
+                play("hit")
+                self.fx.append([PLAYER_X, self.py - 70, "-1", (255, 77, 94), 1.0])
+                if self.lives <= 0:
+                    self.end(False)
+                    return
+
+        for b in self.items:
+            b["x"] -= self.speed * dt
+            box = pygame.Rect(b["x"] - 15, b["y"] - 34, 30, 34)
+            if not b["got"] and me.colliderect(box):
+                b["got"] = True
+                self.bags += 1
+                play("bag")
+                self.fx.append([b["x"], b["y"] - 40, "+1", (31, 138, 59), 1.0])
+
+        self.obs = [o for o in self.obs if o["x"] > -90]
+        self.items = [b for b in self.items if b["x"] > -50 and not b["got"]]
+        for f in self.fx:
+            f[1] -= 50 * dt
+            f[4] -= dt * 1.2
+        self.fx = [f for f in self.fx if f[4] > 0]
+
+
+# ---------------- การวาด ----------------
+def wrap(v, span, off):
+    return (v % span + span) % span - off
+
+
+def draw_bg(s, scroll):
+    for y in range(GY):  # ท้องฟ้าไล่สี
+        k = y / GY
+        pygame.draw.line(s, (int(95 + 110 * k), int(191 + 47 * k), 255), (0, y), (W, y))
+    pygame.draw.circle(s, (255, 243, 166), (820, 78), 38)
+    for i in range(5):   # เมฆ
+        x, y = wrap(i * 260 - scroll * 0.12, 1300, 160), 50 + (i % 3) * 34
+        for dx, dy, rw, rh in [(0, 0, 46, 16), (26, -10, 28, 18), (-22, -4, 24, 13)]:
+            pygame.draw.ellipse(s, (255, 255, 255), (x + dx - rw, y + dy - rh, rw * 2, rh * 2))
+    for i in range(6):   # เนิน
+        x = wrap(i * 240 - scroll * 0.3, 1440, 240)
+        pygame.draw.ellipse(s, (155, 214, 138), (x - 170, GY - 100, 340, 220))
+    for i in range(7):   # ต้นไม้
+        x = wrap(i * 170 - scroll * 0.6, 1190, 110)
+        pygame.draw.rect(s, (122, 75, 38), (x - 5, GY - 60, 10, 60))
+        for cx, cy, r in [(0, -74, 30), (-18, -58, 20), (18, -58, 20)]:
+            pygame.draw.circle(s, (63, 156, 58), (x + cx, GY + cy), r)
+    pygame.draw.rect(s, (91, 180, 74), (0, GY, W, 16))
+    pygame.draw.rect(s, (168, 112, 60), (0, GY + 16, W, H - GY - 16))
+    for i in range(14):
+        x = wrap(i * 80 - scroll, 1120, 80)
+        pygame.draw.rect(s, (143, 92, 47), (x, GY + 34, 34, 6))
+        pygame.draw.rect(s, (143, 92, 47), (x + 40, GY + 56, 22, 5))
+
+
+def shadow(s, x, w):
+    sh = pygame.Surface((w * 2, 10), pygame.SRCALPHA)
+    pygame.draw.ellipse(sh, (0, 0, 0, 46), sh.get_rect())
+    s.blit(sh, (x - w, GY - 2))
+
+
+def draw_hero(s, g):
+    x, y = PLAYER_X, g.py
+    shadow(s, x, max(8, int(20 - (GY - y) / 10)))
+    if g.inv > 0 and int(g.inv * 12) % 2:
+        return  # กะพริบตอนอมตะ
+    # วาดลงพื้นผิวขนาด 80x80 แล้วค่อยบีบเวลาก้ม
+    surf = pygame.Surface((80, 80), pygame.SRCALPHA)
+    ox, oy = 40, 78   # จุดเท้า
+    air = y < GY
+    sw = 0.5 if air else math.sin(g.run) * 0.6
+    # หาง
+    pygame.draw.ellipse(surf, (255, 138, 42), (ox - 40, oy - 36, 30, 14))
+    pygame.draw.ellipse(surf, (255, 255, 255), (ox - 42, oy - 34, 10, 9))
+    # ขา
+    for a in (sw, -sw):
+        lx = ox + math.sin(a) * 10
+        pygame.draw.line(surf, (90, 58, 34), (ox, oy - 16), (lx, oy - 3), 8)
+        pygame.draw.rect(surf, (47, 47, 58), (lx - 5, oy - 4, 12, 4))
+    # ตัว (เสื้อกันฝน)
+    pygame.draw.rect(surf, (255, 201, 40), (ox - 16, oy - 44, 32, 30), border_radius=9)
+    pygame.draw.rect(surf, (224, 168, 0), (ox - 1, oy - 42, 2, 26))
+    # หู หัว ปาก ตา จมูก
+    pygame.draw.polygon(surf, (255, 138, 42), [(ox - 11, oy - 56), (ox - 7, oy - 72), (ox - 1, oy - 58)])
+    pygame.draw.polygon(surf, (255, 138, 42), [(ox + 1, oy - 58), (ox + 8, oy - 72), (ox + 11, oy - 55)])
+    pygame.draw.circle(surf, (255, 138, 42), (ox, oy - 50), 14)
+    pygame.draw.ellipse(surf, (255, 255, 255), (ox + 1, oy - 51, 18, 12))
+    pygame.draw.circle(surf, (29, 35, 48), (ox + 18, oy - 47), 3)
+    pygame.draw.circle(surf, (29, 35, 48), (ox + 6, oy - 54), 3)
+    if g.duck:
+        surf = pygame.transform.smoothscale(surf, (92, 44))
+        s.blit(surf, (x - 46, y - 43))
+    else:
+        s.blit(surf, (x - ox, y - oy))
+
+
+def draw_obs(s, o, t):
+    x, y, w, h = o["x"], o["y"], o["w"], o["h"]
+    if o["type"] == "cone":
+        shadow(s, x + w / 2, 18)
+        pygame.draw.polygon(s, (255, 106, 26), [(x + w / 2, y), (x + w - 3, y + h - 6), (x + 3, y + h - 6)])
+        pygame.draw.rect(s, (255, 255, 255), (x + 10, y + 16, w - 20, 6))
+        pygame.draw.rect(s, (255, 255, 255), (x + 7, y + 28, w - 14, 6))
+        pygame.draw.rect(s, (217, 79, 12), (x - 2, y + h - 7, w + 4, 7))
+    elif o["type"] == "crate":
+        shadow(s, x + w / 2, 26)
+        pygame.draw.rect(s, (201, 138, 69), (x, y, w, h))
+        pygame.draw.rect(s, (138, 90, 40), (x + 2, y + 2, w - 4, h - 4), 4)
+        pygame.draw.line(s, (138, 90, 40), (x + 4, y + 4), (x + w - 4, y + h - 4), 4)
+    else:  # โดรน
+        yy = y + math.sin(t * 6 + x * 0.02) * 3
+        pygame.draw.rect(s, (74, 80, 104), (x + 6, yy + 8, w - 12, 4))
+        pygame.draw.rect(s, (107, 114, 144), (x + 16, yy + 10, w - 32, 16), border_radius=6)
+        light = (255, 77, 94) if int(t * 4) % 2 else (255, 179, 186)
+        pygame.draw.circle(s, light, (x + w / 2, yy + 18), 4)
+        for px in (x + 8, x + w - 8):
+            pw = 14 * abs(math.cos(t * 30))
+            pygame.draw.rect(s, (43, 51, 80), (px - pw, yy + 3, pw * 2 + 1, 3))
+            pygame.draw.rect(s, (43, 51, 80), (px - 1, yy + 3, 3, 6))
+
+
+def draw_bag(s, b, t):
+    x = b["x"]
+    y = b["y"] + (math.sin(t * 4 + x * 0.03) * 4 if b["y"] < GY else 0)
+    if b["y"] >= GY:
+        shadow(s, x, 14)
+    pygame.draw.circle(s, (46, 58, 72), (x, y - 14), 15)
+    pygame.draw.polygon(s, (46, 58, 72), [(x - 6, y - 26), (x, y - 32), (x + 6, y - 26)])
+    pygame.draw.rect(s, (255, 201, 40), (x - 5, y - 30, 10, 3))
+    pygame.draw.polygon(s, (255, 201, 40), [(x, y - 31), (x - 8, y - 38), (x - 3, y - 30)])
+    pygame.draw.polygon(s, (255, 201, 40), [(x, y - 31), (x + 8, y - 38), (x + 3, y - 30)])
+
+
+def pill(s, text, x, y, anchor="left", bg=(255, 255, 255), fg=(29, 35, 48)):
+    img = F_MID.render(text, True, fg)
+    r = img.get_rect()
+    box = pygame.Rect(0, 0, r.w + 28, r.h + 6)
+    setattr(box, "top" + anchor if anchor != "center" else "midtop", (x, y))
+    pygame.draw.rect(s, bg, box, border_radius=99)
+    s.blit(img, img.get_rect(center=box.center))
+    return box
+
+
+def draw_heart(s, cx, cy, full):
+    c = (255, 77, 94) if full else (201, 204, 214)
+    pygame.draw.circle(s, c, (cx - 6, cy - 3), 7)
+    pygame.draw.circle(s, c, (cx + 6, cy - 3), 7)
+    pygame.draw.polygon(s, c, [(cx - 13, cy - 1), (cx + 13, cy - 1), (cx, cy + 12)])
+
+
+def draw_hud(s, g):
+    t = math.ceil(g.t)
+    low = t <= 5 and g.mode == "play"
+    pill(s, f"เวลา {t}", 14, 12, "left", (255, 90, 78) if low else (255, 255, 255),
+         (255, 255, 255) if low else (29, 35, 48))
+    pill(s, f"ถุงขยะ {g.bags}", W - 14, 12, "right")
+    pygame.draw.rect(s, (255, 255, 255), (W / 2 - 52, 12, 104, 36), border_radius=99)
+    for i in range(3):
+        draw_heart(s, W / 2 - 28 + i * 28, 30, i < g.lives)
+    if g.alert > 0:
+        img = F_BIG.render("เร็วขึ้นแล้ว!", True, (255, 77, 94))
+        s.blit(img, img.get_rect(center=(W / 2, 110)))
+
+
+def draw_overlay(s, g, mouse):
+    dim = pygame.Surface((W, H), pygame.SRCALPHA)
+    dim.fill((20, 26, 43, 160))
+    s.blit(dim, (0, 0))
+    if g.mode == "start":
+        title, col = "นักวิ่งเก็บขยะ", (255, 255, 255)
+        msg = "รอดให้ครบ 30 วินาที มี 3 ชีวิต   กระโดด: ↑ / Space   ก้ม: ↓"
+        label = "เริ่มเกม"
+    elif g.mode == "win":
+        title, col = "ชนะแล้ว!", (255, 201, 40)
+        msg = f"รอดครบ 30 วินาที เก็บถุงขยะได้ {g.bags} ถุง"
+        label = "เริ่มใหม่"
+    else:
+        title, col = "แพ้แล้ว", (255, 138, 128)
+        msg = f"ชีวิตหมดแล้ว เก็บถุงขยะได้ {g.bags} ถุง ลองอีกครั้งนะ"
+        label = "เริ่มใหม่"
+    img = F_BIG.render(title, True, col)
+    s.blit(img, img.get_rect(center=(W / 2, 140)))
+    img = F_SM.render(msg, True, (255, 255, 255))
+    s.blit(img, img.get_rect(center=(W / 2, 200)))
+    btn = pygame.Rect(0, 0, 200, 54)
+    btn.center = (W / 2, 270)
+    hover = btn.collidepoint(mouse)
+    pygame.draw.rect(s, (184, 137, 10), btn.move(0, 5), border_radius=99)
+    pygame.draw.rect(s, (255, 214, 80) if hover else (255, 201, 40), btn, border_radius=99)
+    img = F_MID.render(label, True, (29, 35, 48))
+    s.blit(img, img.get_rect(center=btn.center))
+    return btn
+
+
+# ---------------- ลูปหลัก ----------------
+def main():
+    g = Game()
+    canvas = pygame.Surface((W, H))
+    btn = pygame.Rect(0, 0, 0, 0)
+    t = 0.0
+    running = True
+    while running:
+        dt = min(clock.tick(60) / 1000, 0.033)
+        t += dt
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT:
+                running = False
+            elif e.type == pygame.KEYDOWN and g.mode != "play" and e.key in (
+                    pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
+                g.start()
+            elif e.type == pygame.MOUSEBUTTONDOWN and g.mode != "play" and btn.collidepoint(e.pos):
+                g.start()
+
+        if g.mode == "play":
+            g.update(dt, pygame.key.get_pressed())
+
+        draw_bg(canvas, g.scroll)
+        for b in g.items:
+            draw_bag(canvas, b, t)
+        for o in g.obs:
+            draw_obs(canvas, o, t)
+        draw_hero(canvas, g)
+        for x, y, txt, col, a in g.fx:
+            img = F_MID.render(txt, True, col)
+            img.set_alpha(int(max(0, a) * 255))
+            canvas.blit(img, img.get_rect(center=(x, y)))
+        draw_hud(canvas, g)
+        if g.mode != "play":
+            btn = draw_overlay(canvas, g, pygame.mouse.get_pos())
+
+        off = (random.randint(-5, 5), random.randint(-4, 4)) if g.shake > 0 else (0, 0)
+        screen.fill((0, 0, 0))
+        screen.blit(canvas, off)
+        pygame.display.flip()
+    pygame.quit()
+
+
+if __name__ == "__main__":
+    main()
