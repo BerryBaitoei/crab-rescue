@@ -1,444 +1,299 @@
-"""
-นักวิ่งเก็บขยะ (Trash Runner) - เวอร์ชัน Python + pygame
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>นักวิ่งเก็บขยะ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* VOICE: สนุก สดใส แบบเกมแอ็กชันวันแดดจ้า
+   IDEA: ตู้เกมอาเขตเล็ก ๆ ที่มีจอเกมวิ่งในสวนสาธารณะ
+   PICTURE: ตัวเกมเองคือภาพหลัก — จิ้งจอกใส่เสื้อกันฝนวิ่งเก็บถุงขยะ
+   COLOUR and TYPE: ฟ้า #8fd3ff, หญ้า #5bb44a, เหลืองเสื้อกันฝน #ffc928, ตัวอักษร Mitr
+   LAYOUT: ชื่อเกมเล็ก ๆ ด้านบน จอเกมเต็มกว้าง ปุ่มสัมผัสด้านล่าง */
+:root{color-scheme:light dark;--bg:light-dark(#fff6d8,#141a2b);--ink:light-dark(#1d2330,#f1f3fa);--case:light-dark(#2b3350,#0b0f1c);--soft:light-dark(#5b6275,#aab1c6);--acc:#ffc928}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 Mitr,system-ui,sans-serif;overflow-x:clip}
+.band{padding:clamp(18px,3vw,40px) max(4vw,12px);max-width:1080px;margin:0 auto}
+h1{font-size:clamp(26px,4vw,38px);line-height:1.05;margin:0 0 4px;font-weight:600;text-wrap:balance}
+.sub{margin:0 0 16px;color:var(--soft);font-size:15px}
+.case{background:var(--case);border-radius:22px;padding:clamp(8px,1.6vw,16px);box-shadow:0 14px 0 -4px rgba(0,0,0,.25)}
+.screen{position:relative;border-radius:12px;overflow:hidden;aspect-ratio:960/420;background:#8fd3ff}
+canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:clamp(6px,1.4vw,14px) clamp(8px,1.8vw,18px);color:#1d2330;font-weight:600;font-size:clamp(13px,2vw,20px);pointer-events:none}
+.pill{background:rgba(255,255,255,.85);border-radius:99px;padding:2px 14px;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.pill svg{width:1.1em;height:1.1em}
+.time.low{background:#ff5a4e;color:#fff}
+.ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:rgba(20,26,43,.62);color:#fff;padding:16px;gap:6px}
+.ov[hidden]{display:none}
+.ov h2{font-size:clamp(30px,6vw,52px);line-height:1.05;margin:0}
+.ov p{margin:0 0 10px;font-size:clamp(14px,2vw,18px);max-width:34em}
+.alert{position:absolute;left:50%;top:22%;transform:translateX(-50%);font-weight:600;font-size:clamp(20px,4vw,36px);color:#ff4d5e;-webkit-text-stroke:1px #fff;pointer-events:none;white-space:nowrap}
+.alert[hidden]{display:none}
+.ov.win h2{color:var(--acc)}.ov.lose h2{color:#ff8a80}
+.btn{font:600 18px Mitr,sans-serif;background:var(--acc);color:#1d2330;border:0;border-radius:99px;padding:10px 30px;min-height:46px;cursor:pointer;box-shadow:0 5px 0 #b8890a}
+.btn:active{transform:translateY(3px);box-shadow:0 2px 0 #b8890a}
+.btn:focus-visible,.pad button:focus-visible{outline:3px solid #fff;outline-offset:3px}
+.pad{display:flex;justify-content:space-between;gap:10px;margin-top:12px;user-select:none;-webkit-user-select:none;touch-action:none}
+.pad button{font:600 18px Mitr,sans-serif;flex:1;max-width:220px;min-height:54px;border-radius:14px;border:0;background:#3d4770;color:#fff;cursor:pointer;touch-action:none}
+.pad button.on{background:var(--acc);color:#1d2330}
+.keys{display:flex;flex-wrap:wrap;gap:6px 18px;margin:14px 0 0;color:var(--soft);font-size:14px;padding:0;list-style:none}
+kbd{font:600 13px Mitr,sans-serif;background:var(--ink);color:var(--bg);border-radius:5px;padding:0 6px}
+@media(hover:hover) and (pointer:fine){.pad{display:none}}
+@media(max-width:600px){.pad button{min-width:58px;font-size:15px}}
+</style>
+</head>
+<body>
+<main class="band">
+  <h1>นักวิ่งเก็บขยะ</h1>
+  <p class="sub">พาเจ้าจิ้งจอกวิ่งเก็บถุงขยะในสวนให้รอด 30 วินาที กระโดดข้ามกรวยกับลังไม้ ก้มหลบโดรน และระวัง ครึ่งหลังสิ่งกีดขวางจะมาถี่ขึ้น</p>
+  <div class="case">
+    <div class="screen">
+      <canvas id="c" aria-label="จอเกม"></canvas>
+      <div class="hud">
+        <span class="pill time" id="time">เวลา 30</span>
+        <span class="pill" id="lives" aria-label="ชีวิต"></span>
+        <span class="pill" id="bags">ถุงขยะ 0</span>
+      </div>
+      <div class="alert" id="alert" hidden>เร็วขึ้นแล้ว!</div>
+      <div class="ov" id="ov">
+        <h2 id="ovT">นักวิ่งเก็บขยะ</h2>
+        <p id="ovP">เอาตัวรอดให้ครบ 30 วินาที มี 3 ชีวิต ชนสิ่งกีดขวางเสีย 1 ชีวิต</p>
+        <button class="btn" id="go">เริ่มเกม</button>
+      </div>
+    </div>
+    <div class="pad" aria-label="ปุ่มควบคุม">
+      <button data-k="d">ก้ม</button><button data-k="u">กระโดด</button>
+    </div>
+  </div>
+  <ul class="keys">
+    <li><kbd>↑</kbd> <kbd>W</kbd> หรือ <kbd>Space</kbd> กระโดด</li>
+    <li><kbd>↓</kbd> หรือ <kbd>S</kbd> ก้ม</li>
+    <li><kbd>Enter</kbd> เริ่ม / เริ่มใหม่</li>
+  </ul>
+</main>
+<script>
+{
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const W=960,H=420,GY=350,DUR=30;
+const $=id=>document.getElementById(id);
+const ov=$('ov'),ovT=$('ovT'),ovP=$('ovP'),go=$('go');
+const keys={u:false,d:false};
+let st=null,mode='start',last=0;
+const R=(a,b)=>a+Math.random()*(b-a);
+const GAP=180;
+let ac=null;
+function audio(){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();}catch(e){ac=null;}}
+function tone(f1,f2,dur,type,vol,at=0){
+  if(!ac)return;try{
+  const t=ac.currentTime+at,o=ac.createOscillator(),g=ac.createGain();
+  o.type=type;o.frequency.setValueAtTime(f1,t);o.frequency.exponentialRampToValueAtTime(f2,t+dur);
+  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.001,t+dur);
+  o.connect(g).connect(ac.destination);o.start(t);o.stop(t+dur+0.02);}catch(e){}
+}
+function noise(dur,vol){
+  if(!ac)return;try{
+  const n=Math.floor(ac.sampleRate*dur),b=ac.createBuffer(1,n,ac.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*(1-i/n);
+  const src=ac.createBufferSource(),g=ac.createGain(),f=ac.createBiquadFilter();
+  f.type='lowpass';f.frequency.value=900;src.buffer=b;g.gain.value=vol;
+  src.connect(f).connect(g).connect(ac.destination);src.start();}catch(e){}
+}
+const sfx={
+  bag(){tone(660,990,0.09,'square',0.12);tone(990,1480,0.12,'square',0.1,0.08);},
+  hit(){noise(0.28,0.5);tone(220,70,0.35,'sawtooth',0.18);},
+  win(){[523,659,784,1046].forEach((f,i)=>tone(f,f,0.18,'triangle',0.18,i*0.13));},
+  lose(){[392,330,262,196].forEach((f,i)=>tone(f,f*0.97,0.24,'triangle',0.18,i*0.18));},
+  fast(){tone(880,880,0.08,'square',0.08);tone(880,880,0.08,'square',0.08,0.14);}
+};
 
-ติดตั้ง:  pip install pygame
-รัน:      python trash_runner.py
+function fit(){const d=Math.min(2,window.devicePixelRatio||1);cv.width=W*d;cv.height=H*d;ctx.setTransform(d,0,0,d,0,0);}
+fit();window.addEventListener('resize',fit);
 
-ควบคุม:
-  ↑ / W / Space  = กระโดด
-  ↓ / S          = ก้ม
-  Enter หรือคลิกปุ่ม = เริ่ม / เริ่มใหม่
-"""
-import math
-import random
-from array import array
+const heart=f=>`<svg viewBox="0 0 24 24"><path d="M12 21s-8-5.2-8-11a4.5 4.5 0 0 1 8-2.8A4.5 4.5 0 0 1 20 10c0 5.8-8 11-8 11z" fill="${f?'#ff4d5e':'#c9ccd6'}"/></svg>`;
+function hud(){
+  const t=Math.ceil(st.t);$('time').textContent='เวลา '+t;$('time').classList.toggle('low',t<=5&&mode==='play');
+  $('lives').innerHTML=[0,1,2].map(i=>heart(i<st.lives)).join('');
+  $('bags').textContent='ถุงขยะ '+st.bags;
+}
+function reset(){st={t:DUR,lives:3,bags:0,speed:280,px:200,py:GY,vy:0,duck:false,inv:0,obs:[],items:[],nO:1.4,nB:0.5,run:0,scroll:0,fx:[],shake:0,hard:false};$('alert').hidden=true;hud();}
 
-import pygame
+function start(){audio();reset();mode='play';ov.hidden=true;ov.className='ov';last=performance.now();cv.focus?.();}
+function end(win){
+  mode=win?'win':'lose';ov.hidden=false;ov.className='ov '+(win?'win':'lose');
+  ovT.textContent=win?'ชนะแล้ว!':'แพ้แล้ว';
+  ovP.textContent=win?`รอดครบ 30 วินาที เก็บถุงขยะได้ ${st.bags} ถุง`:`ชีวิตหมดแล้ว เก็บถุงขยะได้ ${st.bags} ถุง ลองอีกครั้งนะ`;
+  go.textContent='เริ่มใหม่';win?sfx.win():sfx.lose();hud();setTimeout(()=>go.focus(),50);
+}
+go.addEventListener('click',start);
 
-# ---------------- ค่าตั้งต้นของเกม ----------------
-W, H = 960, 420          # ขนาดหน้าจอ
-GY = 350                 # ระดับพื้น
-DUR = 30                 # เวลาเล่น (วินาที)
-GAP = 180                # ระยะห่างขั้นต่ำระหว่างถุงขยะกับสิ่งกีดขวาง
-JUMP_V = -640            # ความแรงกระโดด (ยิ่งติดลบมาก ยิ่งกระโดดสูง)
-GRAVITY = 2100
-PLAYER_X = 200
-SR = 22050               # sample rate ของเสียง
+const map={ArrowUp:'u',KeyW:'u',Space:'u',ArrowDown:'d',KeyS:'d'};
+addEventListener('keydown',e=>{
+  if(e.code==='Enter'&&mode!=='play'){e.preventDefault();start();return;}
+  const k=map[e.code];if(k){e.preventDefault();if(mode!=='play'&&e.code==='Space'&&document.activeElement!==go){start();return;}keys[k]=true;}
+});
+addEventListener('keyup',e=>{const k=map[e.code];if(k)keys[k]=false;});
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false;});
+for(const b of document.querySelectorAll('.pad button')){
+  const k=b.dataset.k;
+  const on=e=>{e.preventDefault();keys[k]=true;b.classList.add('on');};
+  const off=e=>{e.preventDefault();keys[k]=false;b.classList.remove('on');};
+  b.addEventListener('pointerdown',on);b.addEventListener('pointerup',off);b.addEventListener('pointerleave',off);b.addEventListener('pointercancel',off);
+}
 
-pygame.mixer.pre_init(SR, -16, 1, 512)
-pygame.init()
-screen = pygame.display.set_mode((W, H))
-pygame.display.set_caption("นักวิ่งเก็บขยะ")
-clock = pygame.time.Clock()
+function hit(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
 
+function spawnObs(){
+  const late=st.t<DUR-2.5,r=Math.random();
+  let o;
+  if(late&&r<0.38)o={type:'drone',w:62,h:30,y:GY-66};
+  else if(r<0.7)o={type:'cone',w:34,h:46,y:GY-46};
+  else o={type:'crate',w:50,h:42,y:GY-42};
+  o.x=W+40;
+  for(const b of st.items)if(!b.got&&b.x+b.w/2+GAP>o.x)o.x=b.x+b.w/2+GAP;
+  st.obs.push(o);
+  st.nO=st.hard?R(0.75,1.15):R(1.25,1.9);
+}
+function spawnBag(){
+  const high=Math.random()<0.4;let x=W+40+R(0,120);
+  for(const o of st.obs)if(x>o.x-GAP&&x<o.x+o.w+GAP)x=o.x+o.w+GAP;
+  st.items.push({x,y:high?GY-80:GY,w:30,h:34});
+  st.nB=R(0.6,1.2);
+}
 
-def thai_font(size, bold=False):
-    """หาฟอนต์ที่รองรับภาษาไทยในเครื่อง"""
-    for name in ["tahoma", "leelawadeeui", "leelawadee", "thonburi", "sukhumvitset",
-                 "notosansthai", "loma", "garuda", "kinnari", "browalliaupc"]:
-        path = pygame.font.match_font(name, bold=bold)
-        if path:
-            f = pygame.font.Font(path, size)
-            # เช็กว่าฟอนต์มีตัวอักษรไทยจริง (ถ้าไม่มี จะได้กล่องเหมือนตัวอักษรที่ไม่มีอยู่จริง)
-            thai = pygame.image.tobytes(f.render("ก", True, (255, 255, 255)), "RGBA")
-            missing = pygame.image.tobytes(f.render("", True, (255, 255, 255)), "RGBA")
-            if thai != missing:
-                return f
-    return pygame.font.SysFont(None, size, bold=bold)
+function update(dt){
+  st.t-=dt;if(st.t<=0){st.t=0;end(true);return;}
+  if(!st.hard&&st.t<=DUR/2){st.hard=true;st.nO=Math.min(st.nO,0.5);$('alert').hidden=false;sfx.fast();setTimeout(()=>{$('alert').hidden=true;},1600);}
+  st.speed=(st.hard?340:280)+(DUR-st.t)*5;
+  const onG=st.py>=GY;
+  st.duck=keys.d&&onG;
+  if(keys.u&&onG&&!st.duck)st.vy=-640;
+  st.vy+=(keys.d&&!onG?4200:2100)*dt;st.py+=st.vy*dt;
+  if(st.py>=GY){st.py=GY;st.vy=0;}
+  st.run+=dt*st.speed/28;st.scroll+=st.speed*dt;
+  if(st.inv>0)st.inv-=dt;if(st.shake>0)st.shake-=dt;
 
+  if((st.nO-=dt)<=0)spawnObs();
+  if((st.nB-=dt)<=0)spawnBag();
 
-F_BIG = thai_font(56, True)
-F_MID = thai_font(24, True)
-F_SM = thai_font(20)
-
-
-# ---------------- เสียงเอฟเฟกต์ (สร้างจากคลื่นเสียง ไม่ใช้ไฟล์) ----------------
-def make_sound(parts):
-    """parts = [(ความถี่เริ่ม, ความถี่จบ, วินาที, ชนิดคลื่น, ความดัง), ...] เล่นต่อกัน"""
-    buf = array("h")
-    for f1, f2, dur, kind, vol in parts:
-        n = int(SR * dur)
-        phase = 0.0
-        for i in range(n):
-            t = i / n
-            f = f1 * (f2 / f1) ** t
-            phase += f / SR
-            p = phase % 1.0
-            if kind == "square":
-                v = 1.0 if p < 0.5 else -1.0
-            elif kind == "saw":
-                v = 2 * p - 1
-            elif kind == "tri":
-                v = 4 * abs(p - 0.5) - 1
-            else:  # noise
-                v = random.uniform(-1, 1)
-            buf.append(int(v * vol * (1 - t) * 32767))
-    return pygame.mixer.Sound(buffer=buf.tobytes())
-
-
-try:
-    SFX = {
-        "bag": make_sound([(660, 990, 0.08, "square", 0.25), (990, 1480, 0.12, "square", 0.22)]),
-        "hit": make_sound([(300, 60, 0.12, "noise", 0.6), (220, 70, 0.3, "saw", 0.35)]),
-        "fast": make_sound([(880, 880, 0.08, "square", 0.2), (1, 1, 0.06, "tri", 0.0),
-                            (880, 880, 0.08, "square", 0.2)]),
-        "win": make_sound([(f, f, 0.14, "tri", 0.4) for f in (523, 659, 784, 1046)]),
-        "lose": make_sound([(f, f * 0.97, 0.2, "tri", 0.4) for f in (392, 330, 262, 196)]),
+  const ph=st.duck?32:60;
+  const me={x:st.px-14,y:st.py-ph+4,w:28,h:ph-4};
+  for(const o of st.obs){
+    o.x-=st.speed*dt;
+    if(!o.hit&&st.inv<=0&&hit(me,{x:o.x+4,y:o.y+4,w:o.w-8,h:o.h-6})){
+      o.hit=true;st.lives--;sfx.hit();st.inv=1.3;st.shake=0.3;
+      st.fx.push({x:st.px,y:st.py-70,txt:'-1',c:'#ff4d5e',a:1});
+      if(st.lives<=0){hud();end(false);return;}
     }
-except pygame.error:
-    SFX = {}
+  }
+  for(const b of st.items){
+    b.x-=st.speed*dt;
+    if(!b.got&&hit(me,{x:b.x-b.w/2,y:b.y-b.h,w:b.w,h:b.h})){b.got=true;st.bags++;sfx.bag();st.fx.push({x:b.x,y:b.y-40,txt:'+1',c:'#1f8a3b',a:1});}
+  }
+  st.obs=st.obs.filter(o=>o.x>-90);st.items=st.items.filter(b=>b.x>-50&&!b.got);
+  for(const f of st.fx){f.y-=50*dt;f.a-=dt*1.2;}st.fx=st.fx.filter(f=>f.a>0);
+  hud();
+}
 
+/* ---------- drawing ---------- */
+function bg(){
+  const g=ctx.createLinearGradient(0,0,0,GY);g.addColorStop(0,'#5fbfff');g.addColorStop(1,'#cdeeff');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='#fff3a6';ctx.beginPath();ctx.arc(820,78,38,0,7);ctx.fill();
+  ctx.fillStyle='rgba(255,243,166,.35)';ctx.beginPath();ctx.arc(820,78,56,0,7);ctx.fill();
+  const s=st?st.scroll:0;
+  ctx.fillStyle='#fff';
+  for(let i=0;i<5;i++){const x=((i*260-s*0.12)%1300+1300)%1300-160,y=50+(i%3)*34;
+    ctx.beginPath();ctx.ellipse(x,y,46,16,0,0,7);ctx.ellipse(x+26,y-10,28,18,0,0,7);ctx.ellipse(x-22,y-4,24,13,0,0,7);ctx.fill();}
+  ctx.fillStyle='#9bd68a';
+  for(let i=0;i<6;i++){const x=((i*240-s*0.3)%1440+1440)%1440-240;ctx.beginPath();ctx.ellipse(x,GY+10,170,110,0,Math.PI,0);ctx.fill();}
+  for(let i=0;i<7;i++){const x=((i*170-s*0.6)%1190+1190)%1190-110;
+    ctx.fillStyle='#7a4b26';ctx.fillRect(x-5,GY-60,10,60);
+    ctx.fillStyle='#3f9c3a';ctx.beginPath();ctx.arc(x,GY-74,30,0,7);ctx.arc(x-18,GY-58,20,0,7);ctx.arc(x+18,GY-58,20,0,7);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.18)';ctx.beginPath();ctx.arc(x-8,GY-84,12,0,7);ctx.fill();}
+  ctx.fillStyle='#5bb44a';ctx.fillRect(0,GY,W,16);
+  ctx.fillStyle='#a8703c';ctx.fillRect(0,GY+16,W,H-GY-16);
+  ctx.fillStyle='#8f5c2f';
+  for(let i=0;i<14;i++){const x=((i*80-s)%1120+1120)%1120-80;ctx.fillRect(x,GY+34,34,6);ctx.fillRect(x+40,GY+56,22,5);}
+  ctx.fillStyle='#4a9d3b';
+  for(let i=0;i<24;i++){const x=((i*44-s)%1056+1056)%1056-44;ctx.beginPath();ctx.moveTo(x,GY);ctx.lineTo(x+6,GY-9);ctx.lineTo(x+12,GY);ctx.fill();}
+}
+function shadow(x,w){ctx.fillStyle='rgba(0,0,0,.18)';ctx.beginPath();ctx.ellipse(x,GY+3,w,5,0,0,7);ctx.fill();}
 
-def play(name):
-    if name in SFX:
-        SFX[name].play()
-
-
-# ---------------- สถานะเกม ----------------
-class Game:
-    def __init__(self):
-        self.reset()
-        self.mode = "start"   # start / play / win / lose
-
-    def reset(self):
-        self.t = DUR
-        self.lives = 3
-        self.bags = 0
-        self.speed = 280
-        self.py = GY
-        self.vy = 0
-        self.duck = False
-        self.inv = 0          # เวลาอมตะหลังโดนชน
-        self.obs = []         # สิ่งกีดขวาง
-        self.items = []       # ถุงขยะ
-        self.next_obs = 1.4
-        self.next_bag = 0.5
-        self.run = 0
-        self.scroll = 0
-        self.fx = []          # ตัวเลข +1 / -1 ลอยขึ้น
-        self.shake = 0
-        self.hard = False
-        self.alert = 0
-
-    def start(self):
-        self.reset()
-        self.mode = "play"
-
-    def end(self, win):
-        self.mode = "win" if win else "lose"
-        play("win" if win else "lose")
-
-    # ---------- สร้างสิ่งกีดขวาง ----------
-    def spawn_obs(self):
-        r = random.random()
-        if self.t < DUR - 2.5 and r < 0.38:
-            o = {"type": "drone", "w": 62, "h": 30, "y": GY - 66}   # ต้องก้มหลบ
-        elif r < 0.7:
-            o = {"type": "cone", "w": 34, "h": 46, "y": GY - 46}    # ต้องกระโดด
-        else:
-            o = {"type": "crate", "w": 50, "h": 42, "y": GY - 42}   # ต้องกระโดด
-        o["x"] = W + 40
-        o["hit"] = False
-        for b in self.items:
-            if b["x"] + 15 + GAP > o["x"]:
-                o["x"] = b["x"] + 15 + GAP
-        self.obs.append(o)
-        self.next_obs = random.uniform(0.75, 1.15) if self.hard else random.uniform(1.25, 1.9)
-
-    # ---------- สร้างถุงขยะ ----------
-    def spawn_bag(self):
-        high = random.random() < 0.4
-        x = W + 40 + random.uniform(0, 120)
-        for o in self.obs:
-            if o["x"] - GAP < x < o["x"] + o["w"] + GAP:
-                x = o["x"] + o["w"] + GAP
-        self.items.append({"x": x, "y": GY - 80 if high else GY, "got": False})
-        self.next_bag = random.uniform(0.6, 1.2)
-
-    def update(self, dt, keys):
-        self.t -= dt
-        if self.t <= 0:
-            self.t = 0
-            self.end(True)
-            return
-
-        # ครบ 15 วินาที -> ยากขึ้น
-        if not self.hard and self.t <= DUR / 2:
-            self.hard = True
-            self.next_obs = min(self.next_obs, 0.5)
-            self.alert = 1.6
-            play("fast")
-        self.speed = (340 if self.hard else 280) + (DUR - self.t) * 5
-
-        jump = keys[pygame.K_UP] or keys[pygame.K_w] or keys[pygame.K_SPACE]
-        down = keys[pygame.K_DOWN] or keys[pygame.K_s]
-        on_ground = self.py >= GY
-        self.duck = down and on_ground
-        if jump and on_ground and not self.duck:
-            self.vy = JUMP_V
-        self.vy += (4200 if down and not on_ground else GRAVITY) * dt
-        self.py += self.vy * dt
-        if self.py >= GY:
-            self.py, self.vy = GY, 0
-
-        self.run += dt * self.speed / 28
-        self.scroll += self.speed * dt
-        self.inv = max(0, self.inv - dt)
-        self.shake = max(0, self.shake - dt)
-        self.alert = max(0, self.alert - dt)
-
-        self.next_obs -= dt
-        if self.next_obs <= 0:
-            self.spawn_obs()
-        self.next_bag -= dt
-        if self.next_bag <= 0:
-            self.spawn_bag()
-
-        ph = 32 if self.duck else 60
-        me = pygame.Rect(PLAYER_X - 14, self.py - ph + 4, 28, ph - 4)
-
-        for o in self.obs:
-            o["x"] -= self.speed * dt
-            box = pygame.Rect(o["x"] + 4, o["y"] + 4, o["w"] - 8, o["h"] - 6)
-            if not o["hit"] and self.inv <= 0 and me.colliderect(box):
-                o["hit"] = True
-                self.lives -= 1
-                self.inv = 1.3
-                self.shake = 0.3
-                play("hit")
-                self.fx.append([PLAYER_X, self.py - 70, "-1", (255, 77, 94), 1.0])
-                if self.lives <= 0:
-                    self.end(False)
-                    return
-
-        for b in self.items:
-            b["x"] -= self.speed * dt
-            box = pygame.Rect(b["x"] - 15, b["y"] - 34, 30, 34)
-            if not b["got"] and me.colliderect(box):
-                b["got"] = True
-                self.bags += 1
-                play("bag")
-                self.fx.append([b["x"], b["y"] - 40, "+1", (31, 138, 59), 1.0])
-
-        self.obs = [o for o in self.obs if o["x"] > -90]
-        self.items = [b for b in self.items if b["x"] > -50 and not b["got"]]
-        for f in self.fx:
-            f[1] -= 50 * dt
-            f[4] -= dt * 1.2
-        self.fx = [f for f in self.fx if f[4] > 0]
-
-
-# ---------------- การวาด ----------------
-def wrap(v, span, off):
-    return (v % span + span) % span - off
-
-
-def draw_bg(s, scroll):
-    for y in range(GY):  # ท้องฟ้าไล่สี
-        k = y / GY
-        pygame.draw.line(s, (int(95 + 110 * k), int(191 + 47 * k), 255), (0, y), (W, y))
-    pygame.draw.circle(s, (255, 243, 166), (820, 78), 38)
-    for i in range(5):   # เมฆ
-        x, y = wrap(i * 260 - scroll * 0.12, 1300, 160), 50 + (i % 3) * 34
-        for dx, dy, rw, rh in [(0, 0, 46, 16), (26, -10, 28, 18), (-22, -4, 24, 13)]:
-            pygame.draw.ellipse(s, (255, 255, 255), (x + dx - rw, y + dy - rh, rw * 2, rh * 2))
-    for i in range(6):   # เนิน
-        x = wrap(i * 240 - scroll * 0.3, 1440, 240)
-        pygame.draw.ellipse(s, (155, 214, 138), (x - 170, GY - 100, 340, 220))
-    for i in range(7):   # ต้นไม้
-        x = wrap(i * 170 - scroll * 0.6, 1190, 110)
-        pygame.draw.rect(s, (122, 75, 38), (x - 5, GY - 60, 10, 60))
-        for cx, cy, r in [(0, -74, 30), (-18, -58, 20), (18, -58, 20)]:
-            pygame.draw.circle(s, (63, 156, 58), (x + cx, GY + cy), r)
-    pygame.draw.rect(s, (91, 180, 74), (0, GY, W, 16))
-    pygame.draw.rect(s, (168, 112, 60), (0, GY + 16, W, H - GY - 16))
-    for i in range(14):
-        x = wrap(i * 80 - scroll, 1120, 80)
-        pygame.draw.rect(s, (143, 92, 47), (x, GY + 34, 34, 6))
-        pygame.draw.rect(s, (143, 92, 47), (x + 40, GY + 56, 22, 5))
-
-
-def shadow(s, x, w):
-    sh = pygame.Surface((w * 2, 10), pygame.SRCALPHA)
-    pygame.draw.ellipse(sh, (0, 0, 0, 46), sh.get_rect())
-    s.blit(sh, (x - w, GY - 2))
-
-
-def draw_hero(s, g):
-    x, y = PLAYER_X, g.py
-    shadow(s, x, max(8, int(20 - (GY - y) / 10)))
-    if g.inv > 0 and int(g.inv * 12) % 2:
-        return  # กะพริบตอนอมตะ
-    # วาดลงพื้นผิวขนาด 80x80 แล้วค่อยบีบเวลาก้ม
-    surf = pygame.Surface((80, 80), pygame.SRCALPHA)
-    ox, oy = 40, 78   # จุดเท้า
-    air = y < GY
-    sw = 0.5 if air else math.sin(g.run) * 0.6
-    # หาง
-    pygame.draw.ellipse(surf, (255, 138, 42), (ox - 40, oy - 36, 30, 14))
-    pygame.draw.ellipse(surf, (255, 255, 255), (ox - 42, oy - 34, 10, 9))
-    # ขา
-    for a in (sw, -sw):
-        lx = ox + math.sin(a) * 10
-        pygame.draw.line(surf, (90, 58, 34), (ox, oy - 16), (lx, oy - 3), 8)
-        pygame.draw.rect(surf, (47, 47, 58), (lx - 5, oy - 4, 12, 4))
-    # ตัว (เสื้อกันฝน)
-    pygame.draw.rect(surf, (255, 201, 40), (ox - 16, oy - 44, 32, 30), border_radius=9)
-    pygame.draw.rect(surf, (224, 168, 0), (ox - 1, oy - 42, 2, 26))
-    # หู หัว ปาก ตา จมูก
-    pygame.draw.polygon(surf, (255, 138, 42), [(ox - 11, oy - 56), (ox - 7, oy - 72), (ox - 1, oy - 58)])
-    pygame.draw.polygon(surf, (255, 138, 42), [(ox + 1, oy - 58), (ox + 8, oy - 72), (ox + 11, oy - 55)])
-    pygame.draw.circle(surf, (255, 138, 42), (ox, oy - 50), 14)
-    pygame.draw.ellipse(surf, (255, 255, 255), (ox + 1, oy - 51, 18, 12))
-    pygame.draw.circle(surf, (29, 35, 48), (ox + 18, oy - 47), 3)
-    pygame.draw.circle(surf, (29, 35, 48), (ox + 6, oy - 54), 3)
-    if g.duck:
-        surf = pygame.transform.smoothscale(surf, (92, 44))
-        s.blit(surf, (x - 46, y - 43))
-    else:
-        s.blit(surf, (x - ox, y - oy))
-
-
-def draw_obs(s, o, t):
-    x, y, w, h = o["x"], o["y"], o["w"], o["h"]
-    if o["type"] == "cone":
-        shadow(s, x + w / 2, 18)
-        pygame.draw.polygon(s, (255, 106, 26), [(x + w / 2, y), (x + w - 3, y + h - 6), (x + 3, y + h - 6)])
-        pygame.draw.rect(s, (255, 255, 255), (x + 10, y + 16, w - 20, 6))
-        pygame.draw.rect(s, (255, 255, 255), (x + 7, y + 28, w - 14, 6))
-        pygame.draw.rect(s, (217, 79, 12), (x - 2, y + h - 7, w + 4, 7))
-    elif o["type"] == "crate":
-        shadow(s, x + w / 2, 26)
-        pygame.draw.rect(s, (201, 138, 69), (x, y, w, h))
-        pygame.draw.rect(s, (138, 90, 40), (x + 2, y + 2, w - 4, h - 4), 4)
-        pygame.draw.line(s, (138, 90, 40), (x + 4, y + 4), (x + w - 4, y + h - 4), 4)
-    else:  # โดรน
-        yy = y + math.sin(t * 6 + x * 0.02) * 3
-        pygame.draw.rect(s, (74, 80, 104), (x + 6, yy + 8, w - 12, 4))
-        pygame.draw.rect(s, (107, 114, 144), (x + 16, yy + 10, w - 32, 16), border_radius=6)
-        light = (255, 77, 94) if int(t * 4) % 2 else (255, 179, 186)
-        pygame.draw.circle(s, light, (x + w / 2, yy + 18), 4)
-        for px in (x + 8, x + w - 8):
-            pw = 14 * abs(math.cos(t * 30))
-            pygame.draw.rect(s, (43, 51, 80), (px - pw, yy + 3, pw * 2 + 1, 3))
-            pygame.draw.rect(s, (43, 51, 80), (px - 1, yy + 3, 3, 6))
-
-
-def draw_bag(s, b, t):
-    x = b["x"]
-    y = b["y"] + (math.sin(t * 4 + x * 0.03) * 4 if b["y"] < GY else 0)
-    if b["y"] >= GY:
-        shadow(s, x, 14)
-    pygame.draw.circle(s, (46, 58, 72), (x, y - 14), 15)
-    pygame.draw.polygon(s, (46, 58, 72), [(x - 6, y - 26), (x, y - 32), (x + 6, y - 26)])
-    pygame.draw.rect(s, (255, 201, 40), (x - 5, y - 30, 10, 3))
-    pygame.draw.polygon(s, (255, 201, 40), [(x, y - 31), (x - 8, y - 38), (x - 3, y - 30)])
-    pygame.draw.polygon(s, (255, 201, 40), [(x, y - 31), (x + 8, y - 38), (x + 3, y - 30)])
-
-
-def pill(s, text, x, y, anchor="left", bg=(255, 255, 255), fg=(29, 35, 48)):
-    img = F_MID.render(text, True, fg)
-    r = img.get_rect()
-    box = pygame.Rect(0, 0, r.w + 28, r.h + 6)
-    setattr(box, "top" + anchor if anchor != "center" else "midtop", (x, y))
-    pygame.draw.rect(s, bg, box, border_radius=99)
-    s.blit(img, img.get_rect(center=box.center))
-    return box
-
-
-def draw_heart(s, cx, cy, full):
-    c = (255, 77, 94) if full else (201, 204, 214)
-    pygame.draw.circle(s, c, (cx - 6, cy - 3), 7)
-    pygame.draw.circle(s, c, (cx + 6, cy - 3), 7)
-    pygame.draw.polygon(s, c, [(cx - 13, cy - 1), (cx + 13, cy - 1), (cx, cy + 12)])
-
-
-def draw_hud(s, g):
-    t = math.ceil(g.t)
-    low = t <= 5 and g.mode == "play"
-    pill(s, f"เวลา {t}", 14, 12, "left", (255, 90, 78) if low else (255, 255, 255),
-         (255, 255, 255) if low else (29, 35, 48))
-    pill(s, f"ถุงขยะ {g.bags}", W - 14, 12, "right")
-    pygame.draw.rect(s, (255, 255, 255), (W / 2 - 52, 12, 104, 36), border_radius=99)
-    for i in range(3):
-        draw_heart(s, W / 2 - 28 + i * 28, 30, i < g.lives)
-    if g.alert > 0:
-        img = F_BIG.render("เร็วขึ้นแล้ว!", True, (255, 77, 94))
-        s.blit(img, img.get_rect(center=(W / 2, 110)))
-
-
-def draw_overlay(s, g, mouse):
-    dim = pygame.Surface((W, H), pygame.SRCALPHA)
-    dim.fill((20, 26, 43, 160))
-    s.blit(dim, (0, 0))
-    if g.mode == "start":
-        title, col = "นักวิ่งเก็บขยะ", (255, 255, 255)
-        msg = "รอดให้ครบ 30 วินาที มี 3 ชีวิต   กระโดด: ↑ / Space   ก้ม: ↓"
-        label = "เริ่มเกม"
-    elif g.mode == "win":
-        title, col = "ชนะแล้ว!", (255, 201, 40)
-        msg = f"รอดครบ 30 วินาที เก็บถุงขยะได้ {g.bags} ถุง"
-        label = "เริ่มใหม่"
-    else:
-        title, col = "แพ้แล้ว", (255, 138, 128)
-        msg = f"ชีวิตหมดแล้ว เก็บถุงขยะได้ {g.bags} ถุง ลองอีกครั้งนะ"
-        label = "เริ่มใหม่"
-    img = F_BIG.render(title, True, col)
-    s.blit(img, img.get_rect(center=(W / 2, 140)))
-    img = F_SM.render(msg, True, (255, 255, 255))
-    s.blit(img, img.get_rect(center=(W / 2, 200)))
-    btn = pygame.Rect(0, 0, 200, 54)
-    btn.center = (W / 2, 270)
-    hover = btn.collidepoint(mouse)
-    pygame.draw.rect(s, (184, 137, 10), btn.move(0, 5), border_radius=99)
-    pygame.draw.rect(s, (255, 214, 80) if hover else (255, 201, 40), btn, border_radius=99)
-    img = F_MID.render(label, True, (29, 35, 48))
-    s.blit(img, img.get_rect(center=btn.center))
-    return btn
-
-
-# ---------------- ลูปหลัก ----------------
-def main():
-    g = Game()
-    canvas = pygame.Surface((W, H))
-    btn = pygame.Rect(0, 0, 0, 0)
-    t = 0.0
-    running = True
-    while running:
-        dt = min(clock.tick(60) / 1000, 0.033)
-        t += dt
-        for e in pygame.event.get():
-            if e.type == pygame.QUIT:
-                running = False
-            elif e.type == pygame.KEYDOWN and g.mode != "play" and e.key in (
-                    pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_SPACE):
-                g.start()
-            elif e.type == pygame.MOUSEBUTTONDOWN and g.mode != "play" and btn.collidepoint(e.pos):
-                g.start()
-
-        if g.mode == "play":
-            g.update(dt, pygame.key.get_pressed())
-
-        draw_bg(canvas, g.scroll)
-        for b in g.items:
-            draw_bag(canvas, b, t)
-        for o in g.obs:
-            draw_obs(canvas, o, t)
-        draw_hero(canvas, g)
-        for x, y, txt, col, a in g.fx:
-            img = F_MID.render(txt, True, col)
-            img.set_alpha(int(max(0, a) * 255))
-            canvas.blit(img, img.get_rect(center=(x, y)))
-        draw_hud(canvas, g)
-        if g.mode != "play":
-            btn = draw_overlay(canvas, g, pygame.mouse.get_pos())
-
-        off = (random.randint(-5, 5), random.randint(-4, 4)) if g.shake > 0 else (0, 0)
-        screen.fill((0, 0, 0))
-        screen.blit(canvas, off)
-        pygame.display.flip()
-    pygame.quit()
-
-
-if __name__ == "__main__":
-    main()
+function hero(){
+  const x=st?st.px:200,y=st?st.py:GY,duck=st&&st.duck,air=st&&y<GY,run=st?st.run:0;
+  shadow(x,Math.max(8,20-(GY-y)/10));
+  if(st&&st.inv>0&&Math.floor(st.inv*12)%2)return;
+  ctx.save();ctx.translate(x,y);
+  if(duck)ctx.scale(1.15,0.55);
+  const sw=air?0.5:Math.sin(run)*0.6;
+  ctx.fillStyle='#ff8a2a';ctx.save();ctx.translate(-14,-24);ctx.rotate(-0.7+Math.sin(run*0.5)*0.15);
+  ctx.beginPath();ctx.ellipse(-10,0,16,8,0,0,7);ctx.fill();ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(-22,0,6,5,0,0,7);ctx.fill();ctx.restore();
+  ctx.fillStyle='#5a3a22';
+  for(const s of [sw,-sw]){ctx.save();ctx.translate(0,-16);ctx.rotate(s);ctx.fillRect(-4,0,8,16);ctx.fillStyle='#2f2f3a';ctx.fillRect(-5,13,12,4);ctx.fillStyle='#5a3a22';ctx.restore();}
+  ctx.fillStyle='#ffc928';ctx.beginPath();ctx.roundRect(-16,-44,32,30,9);ctx.fill();
+  ctx.fillStyle='#e0a800';ctx.fillRect(-1,-42,2,26);
+  ctx.fillStyle='#fff8d0';ctx.beginPath();ctx.arc(5,-34,2,0,7);ctx.arc(5,-24,2,0,7);ctx.fill();
+  ctx.fillStyle='#ffc928';ctx.save();ctx.translate(6,-38);ctx.rotate(air?-1.8:-0.3+Math.sin(run+1)*0.5);ctx.fillRect(-3,0,7,16);ctx.restore();
+  ctx.fillStyle='#ff8a2a';
+  ctx.beginPath();ctx.moveTo(-11,-56);ctx.lineTo(-7,-72);ctx.lineTo(-1,-58);ctx.fill();
+  ctx.beginPath();ctx.moveTo(1,-58);ctx.lineTo(8,-72);ctx.lineTo(11,-55);ctx.fill();
+  ctx.beginPath();ctx.arc(0,-50,14,0,7);ctx.fill();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(10,-45,9,6,0,0,7);ctx.fill();
+  ctx.fillStyle='#1d2330';ctx.beginPath();ctx.arc(18,-47,3,0,7);ctx.fill();
+  ctx.beginPath();ctx.arc(6,-54,2.4,0,7);ctx.fill();
+  ctx.restore();
+}
+function cone(o){
+  shadow(o.x+o.w/2,18);
+  ctx.fillStyle='#ff6a1a';ctx.beginPath();ctx.moveTo(o.x+o.w/2,o.y);ctx.lineTo(o.x+o.w-3,o.y+o.h-6);ctx.lineTo(o.x+3,o.y+o.h-6);ctx.fill();
+  ctx.fillStyle='#fff';ctx.fillRect(o.x+10,o.y+16,o.w-20,6);ctx.fillRect(o.x+7,o.y+28,o.w-14,6);
+  ctx.fillStyle='#d94f0c';ctx.fillRect(o.x-2,o.y+o.h-7,o.w+4,7);
+}
+function crate(o){
+  shadow(o.x+o.w/2,26);
+  ctx.fillStyle='#c98a45';ctx.fillRect(o.x,o.y,o.w,o.h);
+  ctx.strokeStyle='#8a5a28';ctx.lineWidth=4;ctx.strokeRect(o.x+2,o.y+2,o.w-4,o.h-4);
+  ctx.beginPath();ctx.moveTo(o.x+4,o.y+4);ctx.lineTo(o.x+o.w-4,o.y+o.h-4);ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,.2)';ctx.fillRect(o.x+4,o.y+4,o.w-8,4);
+}
+function drone(o,t){
+  ctx.fillStyle='rgba(0,0,0,.12)';ctx.beginPath();ctx.ellipse(o.x+o.w/2,GY+3,22,4,0,0,7);ctx.fill();
+  const y=o.y+Math.sin(t*6+o.x*0.02)*3;
+  ctx.fillStyle='#4a5068';ctx.fillRect(o.x+6,y+8,o.w-12,4);
+  ctx.fillStyle='#6b7290';ctx.beginPath();ctx.roundRect(o.x+16,y+10,o.w-32,16,6);ctx.fill();
+  ctx.fillStyle=Math.floor(t*4)%2?'#ff4d5e':'#ffb3ba';ctx.beginPath();ctx.arc(o.x+o.w/2,y+18,3.5,0,7);ctx.fill();
+  ctx.fillStyle='#2b3350';
+  for(const px of [o.x+8,o.x+o.w-8]){const w=14*Math.abs(Math.cos(t*30));ctx.fillRect(px-w,y+3,w*2,3);ctx.fillRect(px-1.5,y+3,3,6);}
+}
+function bag(b,t){
+  const y=b.y+(b.y<GY?Math.sin(t*4+b.x*0.03)*4:0);
+  if(b.y>=GY)shadow(b.x,14);
+  ctx.fillStyle='#2e3a48';ctx.beginPath();ctx.ellipse(b.x,y-14,15,15,0,0,7);ctx.fill();
+  ctx.beginPath();ctx.moveTo(b.x-6,y-26);ctx.lineTo(b.x,y-32);ctx.lineTo(b.x+6,y-26);ctx.fill();
+  ctx.fillStyle='#ffc928';ctx.fillRect(b.x-5,y-30,10,3);
+  ctx.beginPath();ctx.moveTo(b.x,y-31);ctx.lineTo(b.x-8,y-38);ctx.lineTo(b.x-3,y-30);ctx.moveTo(b.x,y-31);ctx.lineTo(b.x+8,y-38);ctx.lineTo(b.x+3,y-30);ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,.25)';ctx.beginPath();ctx.ellipse(b.x-6,y-18,4,7,-0.4,0,7);ctx.fill();
+}
+function draw(t){
+  ctx.save();
+  if(st&&st.shake>0)ctx.translate(R(-5,5),R(-4,4));
+  bg();
+  if(st){for(const b of st.items)bag(b,t);for(const o of st.obs){o.type==='cone'?cone(o):o.type==='crate'?crate(o):drone(o,t);}}
+  hero();
+  if(st)for(const f of st.fx){ctx.globalAlpha=Math.max(0,f.a);ctx.fillStyle=f.c;ctx.font='600 26px Mitr,sans-serif';ctx.textAlign='center';ctx.fillText(f.txt,f.x,f.y);ctx.globalAlpha=1;}
+  ctx.restore();
+}
+function loop(now){
+  const dt=Math.min(0.033,(now-last)/1000||0);last=now;
+  if(mode==='play')update(dt);
+  draw(now/1000);
+  requestAnimationFrame(loop);
+}
+reset();requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
